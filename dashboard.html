@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Traffic CRM</title>
+<script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+<style>
+:root{--bg:#070a10;--card:#101621;--card2:#0c1119;--line:#202a38;--text:#f5f7fb;--muted:#8794a6;--blue:#2ea6ff;--green:#2ed3a5;--red:#ff637c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:1180px;margin:auto;padding:22px 16px 55px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}
+h1{font-size:25px;margin:0}.muted{color:var(--muted)}.actions{display:flex;gap:8px}
+button{cursor:pointer}.ghost,.danger{background:var(--card);color:#dce4ee;border:1px solid var(--line);padding:10px 13px;border-radius:11px}.danger{color:#ff91a2;background:#29131b}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:16px}.stat,.panel{background:var(--card);border:1px solid var(--line);border-radius:19px;padding:19px}.num{font-size:29px;font-weight:850;margin-top:6px}.label{color:var(--muted);font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.panel h2{font-size:16px;margin:0 0 15px}
+.form{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:9px}.form.offer{grid-template-columns:1.4fr 1fr 1fr 1fr auto}
+input,select{width:100%;background:#0a0f17;border:1px solid var(--line);color:var(--text);padding:12px;border-radius:11px;outline:0}select option{background:#101621}
+.primary{border:0;background:var(--blue);color:#fff;font-weight:800;border-radius:11px;padding:12px 16px}.small{font-size:12px;color:var(--muted);margin-top:10px}
+.chart{display:flex;gap:7px;align-items:end;height:145px;padding-top:12px}.barbox{flex:1;height:100%;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:5px}.bar{width:100%;max-width:30px;border-radius:7px 7px 2px 2px;background:linear-gradient(180deg,#2ea6ff,#765dff);min-height:3px}.barlabel{font-size:9px;color:#667487}.barcount{font-size:10px;color:#b9c4d1}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px 9px;border-bottom:1px solid var(--line);white-space:nowrap}th{font-size:11px;color:var(--muted);text-transform:uppercase}.pill{background:#14372f;color:#69e0c2;padding:5px 8px;border-radius:99px;font-size:11px}.url{color:#70c5ff;text-decoration:none;max-width:340px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}.empty{text-align:center;color:var(--muted);padding:25px}
+@media(max-width:850px){.stats{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.form,.form.offer{grid-template-columns:1fr}.top{align-items:flex-start}.url{max-width:180px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+<div><h1>Traffic CRM</h1><div class="muted" id="who">Завантаження…</div></div>
+<div class="actions"><button class="ghost" onclick="refresh()">↻ Оновити</button><button class="danger" onclick="logout()">Вийти</button></div>
+</header>
+
+<section class="stats">
+<div class="stat"><div class="label">УСЬОГО КЛІКІВ</div><div class="num" id="total">0</div></div>
+<div class="stat"><div class="label">СЬОГОДНІ</div><div class="num" id="today">0</div></div>
+<div class="stat"><div class="label">УНІКАЛЬНІ IP</div><div class="num" id="unique">0</div></div>
+</section>
+
+<div class="grid2">
+<section class="panel">
+<h2>Створити офер</h2>
+<form class="form offer" id="offerForm">
+<input id="offerName" placeholder="Назва" required>
+<input id="geo" placeholder="GEO: UA">
+<input id="payout" placeholder="Payout: 25">
+<input id="currency" placeholder="USD" value="USD">
+<button class="primary">Додати</button>
+</form>
+</section>
+
+<section class="panel">
+<h2>Створити tracking link</h2>
+<form class="form" id="linkForm">
+<input id="linkName" placeholder="Назва лінка" required>
+<input id="destination" type="url" placeholder="https://offer.com/..." required>
+<select id="offerSelect"><option value="">Без офера</option></select>
+<input id="source" placeholder="telegram" value="telegram">
+<button class="primary">Створити</button>
+</form>
+<div class="small">Посилання: <b>/t/slug</b>. Усі UTM/query-параметри зберігаються та передаються далі.</div>
+</section>
+</div>
+
+<div class="grid2">
+<section class="panel"><h2>Кліки за останні дні</h2><div id="chart" class="chart"></div></section>
+<section class="panel"><h2>Офери</h2><div class="tablewrap"><table><thead><tr><th>Назва</th><th>GEO</th><th>Payout</th><th></th></tr></thead><tbody id="offers"></tbody></table></div></section>
+</div>
+
+<section class="panel">
+<h2>Tracking links</h2>
+<div class="tablewrap"><table><thead><tr><th>Назва</th><th>Офер</th><th>Source</th><th>Кліки</th><th>URL</th><th></th></tr></thead><tbody id="links"></tbody></table></div>
+<div class="empty" id="empty">Лінків ще немає.</div>
+</section>
+</div>
+
+<script>
+const tg=window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand();}
+
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+
+async function telegramLogin(){
+ if(!tg?.initData)return false;
+ const r=await fetch("/api/telegram-auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData})});
+ return r.ok;
+}
+async function boot(){
+ const ok=await telegramLogin();
+ if(!ok){
+   const me=await fetch("/api/me");
+   if(!me.ok){location="/login";return}
+ }
+ refresh();
+}
+async function refresh(){
+ const [me,stats,offers,links]=await Promise.all([
+  fetch("/api/me").then(r=>r.json()),
+  fetch("/api/stats").then(r=>r.json()),
+  fetch("/api/offers").then(r=>r.json()),
+  fetch("/api/links").then(r=>r.json())
+ ]);
+ who.textContent=`${me.first_name||me.username||"Користувач"} · Telegram Traffic CRM`;
+ total.textContent=stats.total_clicks;today.textContent=stats.today_clicks;unique.textContent=stats.unique_ips;
+
+ offerSelect.innerHTML='<option value="">Без офера</option>'+offers.map(o=>`<option value="${o.id}">${esc(o.name)} · ${esc(o.geo)}</option>`).join("");
+ offersEl.innerHTML=offers.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td><span class="pill">${esc(o.geo||"—")}</span></td><td>${esc(o.payout)} ${esc(o.currency)}</td><td><button class="danger" onclick="delOffer(${o.id})">×</button></td></tr>`).join("");
+
+ empty.style.display=links.length?"none":"block";
+ linksEl.innerHTML=links.map(x=>`<tr>
+ <td><b>${esc(x.name)}</b></td><td>${x.offer_id||"—"}</td><td>${esc(x.source)}</td><td><b>${x.clicks}</b></td>
+ <td><a class="url" href="/t/${encodeURIComponent(x.slug)}" target="_blank">${location.origin}/t/${esc(x.slug)}</a></td>
+ <td><button class="danger" onclick="delLink(${x.id})">×</button></td></tr>`).join("");
+
+ const max=Math.max(1,...stats.daily.map(x=>x.count));
+ chart.innerHTML=stats.daily.map(x=>`<div class="barbox"><div class="barcount">${x.count}</div><div class="bar" style="height:${Math.max(3,x.count/max*100)}%"></div><div class="barlabel">${x.day.slice(5)}</div></div>`).join("");
+}
+const offersEl=document.getElementById("offers"),linksEl=document.getElementById("links");
+
+offerForm.addEventListener("submit",async e=>{
+ e.preventDefault();
+ const r=await fetch("/api/offers",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+  name:offerName.value,geo:geo.value,payout:payout.value,currency:currency.value
+ })});
+ if(!r.ok)return alert((await r.json()).detail||"Помилка");
+ offerForm.reset();currency.value="USD";refresh();
+});
+linkForm.addEventListener("submit",async e=>{
+ e.preventDefault();
+ const r=await fetch("/api/links",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+  name:linkName.value,destination_url:destination.value,offer_id:offerSelect.value||null,source:source.value
+ })});
+ if(!r.ok)return alert((await r.json()).detail||"Помилка");
+ linkForm.reset();source.value="telegram";refresh();
+});
+async function delOffer(id){if(confirm("Видалити офер?")){await fetch("/api/offers/"+id,{method:"DELETE"});refresh()}}
+async function delLink(id){if(confirm("Видалити tracking link та його кліки?")){await fetch("/api/links/"+id,{method:"DELETE"});refresh()}}
+async function logout(){await fetch("/api/logout",{method:"POST"});location="/login"}
+boot();
+</script>
+</body>
+</html>
